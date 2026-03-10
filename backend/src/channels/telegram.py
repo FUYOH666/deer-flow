@@ -4,13 +4,41 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
+import tempfile
 import threading
 from typing import Any
+
+import httpx
 
 from src.channels.base import Channel
 from src.channels.message_bus import InboundMessageType, MessageBus, OutboundMessage, ResolvedAttachment
 
 logger = logging.getLogger(__name__)
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Convert basic Markdown to Telegram HTML format.
+
+    Supports: **bold**, *italic*, `code`, [link](url).
+    Escapes <, >, & for Telegram HTML safety.
+    """
+    if not text:
+        return ""
+    # Escape HTML entities first
+    out = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # Links [text](url) -> <a href="url">text</a>
+    out = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', out)
+    # Inline code `code` -> <code>code</code>
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    # Bold **text** or __text__
+    out = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", out)
+    out = re.sub(r"__([^_]+)__", r"<b>\1</b>", out)
+    # Italic *text* or _text_ (avoid matching inside words)
+    out = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<i>\1</i>", out)
+    out = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"<i>\1</i>", out)
+    return out
 
 
 class TelegramChannel(Channel):
@@ -68,8 +96,25 @@ class TelegramChannel(Channel):
 
         # General message handler
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
+        # Voice message handler (transcribed via ASR)
+        app.add_handler(MessageHandler(filters.VOICE, self._on_voice))
 
         self._application = app
+
+        # Optional: warn if ASR is configured but unreachable (for voice messages)
+        asr_url = os.getenv("LOCAL_AI_ASR_BASE_URL", "").rstrip("/")
+        if asr_url:
+            try:
+                async with httpx.AsyncClient(timeout=5) as client:
+                    r = await client.get(f"{asr_url}/healthz")
+                if r.status_code != 200:
+                    logger.warning(
+                        "[Telegram] ASR health check failed: %s %s",
+                        r.status_code,
+                        (r.text or "")[:200],
+                    )
+            except Exception as e:
+                logger.warning("[Telegram] ASR unreachable at %s: %s", asr_url, e)
 
         # Run polling in a dedicated thread with its own event loop
         self._thread = threading.Thread(target=self._run_polling, daemon=True)
@@ -97,7 +142,8 @@ class TelegramChannel(Channel):
             logger.error("Invalid Telegram chat_id: %s", msg.chat_id)
             return
 
-        kwargs: dict[str, Any] = {"chat_id": chat_id, "text": msg.text}
+        text = _markdown_to_telegram_html(msg.text or "")
+        kwargs: dict[str, Any] = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
 
         # Reply to the last bot message in this chat for threading
         reply_to = self._last_bot_message.get(msg.chat_id)
@@ -280,3 +326,83 @@ class TelegramChannel(Channel):
         if self._main_loop and self._main_loop.is_running():
             asyncio.run_coroutine_threadsafe(self._send_running_reply(chat_id, update.message.message_id), self._main_loop)
             asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._main_loop)
+
+    async def _on_voice(self, update, context) -> None:
+        """Handle voice messages — download, transcribe via ASR, publish as text."""
+        if not self._check_user(update.effective_user.id):
+            return
+
+        chat_id = str(update.effective_chat.id)
+        user_id = str(update.effective_user.id)
+        msg_id = str(update.message.message_id)
+        reply_to = update.message.reply_to_message
+        topic_id = str(reply_to.message_id) if reply_to else msg_id
+
+        base_url = os.getenv("LOCAL_AI_ASR_BASE_URL", "").rstrip("/")
+        timeout = int(os.getenv("LOCAL_AI_ASR_TIMEOUT", "60"))
+
+        if not base_url:
+            logger.warning("[Telegram] LOCAL_AI_ASR_BASE_URL not set, cannot transcribe voice")
+            await update.message.reply_text("ASR не настроен. Отправьте текст.")
+            return
+
+        voice = update.message.voice
+        bot = context.bot
+        tg_file = await bot.get_file(voice.file_id)
+
+        with tempfile.NamedTemporaryFile(suffix=".oga", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            await tg_file.download_to_drive(tmp_path)
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                with open(tmp_path, "rb") as audio_f:
+                    response = await client.post(
+                        f"{base_url}/v1/audio/transcriptions",
+                        files={"file": ("voice.oga", audio_f, "audio/ogg")},
+                        data={"model": "cstr/whisper-large-v3-turbo-int8_float32"},
+                    )
+
+            if response.status_code != 200:
+                logger.warning(
+                    "[Telegram] ASR returned %s: %s",
+                    response.status_code,
+                    (response.text or "")[:500],
+                )
+                await update.message.reply_text("ASR недоступен, попробуйте отправить текст.")
+                return
+
+            result = response.json()
+            text = (result.get("text") or "").strip()
+            if not text and result.get("segments"):
+                text = " ".join(s.get("text", "") for s in result.get("segments", [])).strip()
+            if not text:
+                await update.message.reply_text("Не удалось распознать речь.")
+                return
+
+            text = f"[голос] {text}"
+            inbound = self._make_inbound(
+                chat_id=chat_id,
+                user_id=user_id,
+                text=text,
+                msg_type=InboundMessageType.CHAT,
+                thread_ts=msg_id,
+            )
+            inbound.topic_id = topic_id
+
+            if self._main_loop and self._main_loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    self._send_running_reply(chat_id, update.message.message_id), self._main_loop
+                )
+                asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._main_loop)
+        except httpx.RequestError as e:
+            logger.warning("[Telegram] ASR request failed: %s", e)
+            await update.message.reply_text("ASR недоступен, попробуйте отправить текст.")
+        except Exception:
+            logger.exception("[Telegram] voice transcription failed")
+            await update.message.reply_text("Ошибка транскрипции. Попробуйте отправить текст.")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass

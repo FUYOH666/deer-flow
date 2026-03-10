@@ -1,17 +1,13 @@
 # DeerFlow — форк с поддержкой русского и тайского
 
-> Форк [bytedance/deer-flow](https://github.com/bytedance/deer-flow) с полной поддержкой русского и тайского языков.
+Форк DeerFlow с полной поддержкой русского и тайского языков в интерфейсе и ответах агента.
 
-**DeerFlow** — SuperAgent для исследований, кода и творчества. С sandbox, памятью, инструментами и skills обрабатывает задачи от минут до часов.
-
-## Отличия форка
+## Отличия
 
 - **Русский и тайский** в UI и ответах агента
 - **Локальная модель** — без облачных API, без IP в репозитории
 - Голосовые сообщения в Telegram (ASR)
 - Форматирование Markdown в Telegram (жирный, курсив, ссылки)
-
-📖 [README на русском](docs/README_RU.md) · 📖 [README ภาษาไทย](docs/README_TH.md)
 
 ## Установка
 
@@ -27,7 +23,7 @@ make dev
 
 ### Переменные окружения (`.env`)
 
-Создайте `.env` в корне по образцу `.env.example`:
+Создайте `.env` в корне проекта по образцу `.env.example`:
 
 | Переменная | Назначение |
 |------------|------------|
@@ -38,7 +34,7 @@ make dev
 
 ### Язык ответов агента
 
-В `config.yaml`:
+В `config.yaml` в корне:
 
 ```yaml
 response_language: "ru"   # агент отвечает на русском
@@ -50,11 +46,4 @@ response_language: "th"   # агент отвечает на тайском
 
 ### Язык интерфейса
 
-Settings → Appearance → Language: English, 中文, Русский, ไทย.
-
----
-
-## Оригинальный проект
-
-- [github.com/bytedance/deer-flow](https://github.com/bytedance/deer-flow)
-- [deerflow.tech](https://deerflow.tech/)
+В настройках (Settings → Appearance → Language) доступны: English, 中文, Русский, ไทย.

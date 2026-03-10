@@ -17,7 +17,12 @@ from src.config.summarization_config import load_summarization_config_from_dict
 from src.config.title_config import load_title_config_from_dict
 from src.config.tool_config import ToolConfig, ToolGroupConfig
 
-load_dotenv()
+# Load .env from project root (parent of backend/) so LOCAL_AI_ASR_BASE_URL etc. are available
+_project_root = Path(__file__).resolve().parents[3]
+_env_path = _project_root / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
+load_dotenv()  # Also load from cwd (e.g. backend/.env) if present
 
 
 class AppConfig(BaseModel):
@@ -31,6 +36,10 @@ class AppConfig(BaseModel):
     extensions: ExtensionsConfig = Field(default_factory=ExtensionsConfig, description="Extensions configuration (MCP servers and skills state)")
     model_config = ConfigDict(extra="allow", frozen=False)
     checkpointer: CheckpointerConfig | None = Field(default=None, description="Checkpointer configuration")
+    response_language: str | None = Field(
+        default=None,
+        description="Default language for agent responses (e.g. 'ru' for Russian). If unset, agent follows user's language.",
+    )
 
     @classmethod
     def resolve_config_path(cls, config_path: str | None = None) -> Path:

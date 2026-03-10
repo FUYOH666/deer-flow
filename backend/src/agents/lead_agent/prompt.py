@@ -152,6 +152,7 @@ SYSTEM_PROMPT_TEMPLATE = """
 You are {agent_name}, an open-source super agent.
 </role>
 
+{response_language_section}
 {soul}
 {memory_context}
 
@@ -366,7 +367,14 @@ def get_agent_soul(agent_name: str | None) -> str:
     return ""
 
 
-def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagents: int = 3, *, agent_name: str | None = None, available_skills: set[str] | None = None) -> str:
+def apply_prompt_template(
+    subagent_enabled: bool = False,
+    max_concurrent_subagents: int = 3,
+    *,
+    agent_name: str | None = None,
+    available_skills: set[str] | None = None,
+    response_language: str | None = None,
+) -> str:
     # Get memory context
     memory_context = _get_memory_context(agent_name)
 
@@ -395,9 +403,27 @@ def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagen
     # Get skills section
     skills_section = get_skills_prompt_section(available_skills)
 
+    # Build response language section if configured
+    response_language_section = ""
+    if response_language == "ru":
+        response_language_section = (
+            "\n<response_language>\n"
+            "Always respond in Russian (русский язык). If the user writes in another language, "
+            "still respond in Russian unless they explicitly ask for another language.\n"
+            "</response_language>\n"
+        )
+    elif response_language == "th":
+        response_language_section = (
+            "\n<response_language>\n"
+            "Always respond in Thai (ภาษาไทย). If the user writes in another language, "
+            "still respond in Thai unless they explicitly ask for another language.\n"
+            "</response_language>\n"
+        )
+
     # Format the prompt with dynamic skills and memory
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
         agent_name=agent_name or "DeerFlow 2.0",
+        response_language_section=response_language_section,
         soul=get_agent_soul(agent_name),
         skills_section=skills_section,
         memory_context=memory_context,

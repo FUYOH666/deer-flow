@@ -7,6 +7,9 @@
 # - Environment variables are available for all field values. Example: `api_key: $OPENAI_API_KEY`
 # - The `use` path is a string that looks like "package_name.sub_package_name.module_name:class_name/variable_name".
 
+# Default language for agent responses (e.g. "ru" for Russian). If unset, agent follows user's language.
+# response_language: "ru"
+
 # ============================================================================
 # Models Configuration
 # ============================================================================
