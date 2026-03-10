@@ -10,6 +10,7 @@
 - **Локальная модель** — без облачных API, без IP в репозитории
 - Голосовые сообщения в Telegram (ASR)
 - Форматирование Markdown в Telegram (жирный, курсив, ссылки)
+- Меню команд (/new, /help и др.)
 
 📖 [README на русском](docs/README_RU.md) · 📖 [README ภาษาไทย](docs/README_TH.md)
 

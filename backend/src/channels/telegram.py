@@ -69,6 +69,7 @@ class TelegramChannel(Channel):
             return
 
         try:
+            from telegram import BotCommand
             from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
         except ImportError:
             logger.error("python-telegram-bot is not installed. Install it with: uv add python-telegram-bot")
@@ -100,6 +101,22 @@ class TelegramChannel(Channel):
         app.add_handler(MessageHandler(filters.VOICE, self._on_voice))
 
         self._application = app
+
+        # Set bot command menu (shows when user types / in Telegram)
+        try:
+            await app.bot.set_my_commands(
+                [
+                    BotCommand("start", "Приветствие"),
+                    BotCommand("new", "Новый диалог"),
+                    BotCommand("status", "Текущий тред"),
+                    BotCommand("models", "Список моделей"),
+                    BotCommand("memory", "Память агента"),
+                    BotCommand("help", "Помощь"),
+                ]
+            )
+            logger.info("[Telegram] Command menu set")
+        except Exception as e:
+            logger.warning("[Telegram] Failed to set command menu: %s", e)
 
         # Optional: warn if ASR is configured but unreachable (for voice messages)
         asr_url = os.getenv("LOCAL_AI_ASR_BASE_URL", "").rstrip("/")
@@ -350,7 +367,7 @@ class TelegramChannel(Channel):
         bot = context.bot
         tg_file = await bot.get_file(voice.file_id)
 
-        with tempfile.NamedTemporaryFile(suffix=".oga", delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
             tmp_path = tmp.name
         try:
             await tg_file.download_to_drive(tmp_path)
@@ -359,7 +376,7 @@ class TelegramChannel(Channel):
                 with open(tmp_path, "rb") as audio_f:
                     response = await client.post(
                         f"{base_url}/v1/audio/transcriptions",
-                        files={"file": ("voice.oga", audio_f, "audio/ogg")},
+                        files={"file": ("voice.ogg", audio_f, "audio/ogg")},
                         data={"model": "cstr/whisper-large-v3-turbo-int8_float32"},
                     )
 
