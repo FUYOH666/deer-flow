@@ -31,6 +31,7 @@ make dev
 | `LOCAL_AI_LLM_BASE_URL` | LLM (llama.cpp) ต้องลงท้ายด้วย `/v1` |
 | `LOCAL_AI_ASR_BASE_URL` | ASR สำหรับข้อความเสียงใน Telegram (เช่น `http://your-tailscale-ip:8001`) |
 | `TELEGRAM_BOT_TOKEN` | โทเค็นบอทจาก @BotFather |
+| `TELEGRAM_ALLOWED_USER_ID` | (ตัวเลือก) เฉพาะ user นี้เท่านั้นที่เขียนบอทได้ ดู ID: @userinfobot ไม่ระบุ = ทุกคน |
 | `TAVILY_API_KEY` | การค้นหาในอินเทอร์เน็ต (web search) |
 
 ### ภาษาของคำตอบเอเจนต์

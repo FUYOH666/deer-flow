@@ -421,7 +421,7 @@ memory:
 #   telegram:
 #     enabled: false
 #     bot_token: $TELEGRAM_BOT_TOKEN
-#     allowed_users: []               # empty = allow all
+#     allowed_users: [$TELEGRAM_ALLOWED_USER_ID?]  # [] или не задано = все; задать ID = только этот user (@userinfobot)
 #
 #     # Optional: channel-level session overrides
 #     session:

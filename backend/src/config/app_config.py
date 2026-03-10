@@ -128,9 +128,13 @@ class AppConfig(BaseModel):
         """
         if isinstance(config, str):
             if config.startswith("$"):
-                env_value = os.getenv(config[1:])
+                optional = config.endswith("?")
+                var_name = config[1:-1] if optional else config[1:]
+                env_value = os.getenv(var_name)
                 if env_value is None:
-                    raise ValueError(f"Environment variable {config[1:]} not found for config value {config}")
+                    if optional:
+                        return ""
+                    raise ValueError(f"Environment variable {var_name} not found for config value {config}")
                 return env_value
             return config
         elif isinstance(config, dict):
