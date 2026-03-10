@@ -1,4 +1,8 @@
-"""Telegram channel — connects via long-polling (no public IP needed)."""
+"""Telegram channel — connects via long-polling (no public IP needed).
+
+Runs in the same event loop as the Gateway to avoid "bound to a different event loop"
+errors (python-telegram-bot's httpx/anyio objects must be created and used in one loop).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,6 @@ import logging
 import os
 import re
 import tempfile
-import threading
 from typing import Any
 
 import httpx
@@ -52,9 +55,6 @@ class TelegramChannel(Channel):
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
         super().__init__(name="telegram", bus=bus, config=config)
         self._application = None
-        self._thread: threading.Thread | None = None
-        self._tg_loop: asyncio.AbstractEventLoop | None = None
-        self._main_loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users: set[int] = set()
         for uid in config.get("allowed_users", []):
             try:
@@ -80,11 +80,10 @@ class TelegramChannel(Channel):
             logger.error("Telegram channel requires bot_token")
             return
 
-        self._main_loop = asyncio.get_event_loop()
         self._running = True
         self.bus.subscribe_outbound(self._on_outbound)
 
-        # Build the application
+        # Build and run in the same event loop as Gateway (avoids "bound to different event loop" error)
         app = ApplicationBuilder().token(bot_token).build()
 
         # Command handlers
@@ -133,19 +132,23 @@ class TelegramChannel(Channel):
             except Exception as e:
                 logger.warning("[Telegram] ASR unreachable at %s: %s", asr_url, e)
 
-        # Run polling in a dedicated thread with its own event loop
-        self._thread = threading.Thread(target=self._run_polling, daemon=True)
-        self._thread.start()
+        # Run in same loop as Gateway — initialize, start, then polling (non-blocking)
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
         logger.info("Telegram channel started")
 
     async def stop(self) -> None:
         self._running = False
         self.bus.unsubscribe_outbound(self._on_outbound)
-        if self._tg_loop and self._tg_loop.is_running():
-            self._tg_loop.call_soon_threadsafe(self._tg_loop.stop)
-        if self._thread:
-            self._thread.join(timeout=10)
-            self._thread = None
+        if self._application:
+            try:
+                if self._application.updater.running:
+                    await self._application.updater.stop()
+                await self._application.stop()
+                await self._application.shutdown()
+            except Exception:
+                logger.exception("Error during Telegram shutdown")
         self._application = None
         logger.info("Telegram channel stopped")
 
@@ -251,31 +254,6 @@ class TelegramChannel(Channel):
 
     # -- internal ----------------------------------------------------------
 
-    def _run_polling(self) -> None:
-        """Run telegram polling in a dedicated thread."""
-        self._tg_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._tg_loop)
-        try:
-            # Cannot use run_polling() because it calls add_signal_handler(),
-            # which only works in the main thread.  Instead, manually
-            # initialize the application and start the updater.
-            self._tg_loop.run_until_complete(self._application.initialize())
-            self._tg_loop.run_until_complete(self._application.start())
-            self._tg_loop.run_until_complete(self._application.updater.start_polling())
-            self._tg_loop.run_forever()
-        except Exception:
-            if self._running:
-                logger.exception("Telegram polling error")
-        finally:
-            # Graceful shutdown
-            try:
-                if self._application.updater.running:
-                    self._tg_loop.run_until_complete(self._application.updater.stop())
-                self._tg_loop.run_until_complete(self._application.stop())
-                self._tg_loop.run_until_complete(self._application.shutdown())
-            except Exception:
-                logger.exception("Error during Telegram shutdown")
-
     def _check_user(self, user_id: int) -> bool:
         if not self._allowed_users:
             return True
@@ -305,9 +283,8 @@ class TelegramChannel(Channel):
             thread_ts=msg_id,
         )
 
-        if self._main_loop and self._main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._send_running_reply(chat_id, update.message.message_id), self._main_loop)
-            asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._main_loop)
+        await self._send_running_reply(chat_id, update.message.message_id)
+        await self.bus.publish_inbound(inbound)
 
     async def _on_text(self, update, context) -> None:
         """Handle regular text messages."""
@@ -340,9 +317,8 @@ class TelegramChannel(Channel):
         )
         inbound.topic_id = topic_id
 
-        if self._main_loop and self._main_loop.is_running():
-            asyncio.run_coroutine_threadsafe(self._send_running_reply(chat_id, update.message.message_id), self._main_loop)
-            asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._main_loop)
+        await self._send_running_reply(chat_id, update.message.message_id)
+        await self.bus.publish_inbound(inbound)
 
     async def _on_voice(self, update, context) -> None:
         """Handle voice messages — download, transcribe via ASR, publish as text."""
@@ -407,11 +383,8 @@ class TelegramChannel(Channel):
             )
             inbound.topic_id = topic_id
 
-            if self._main_loop and self._main_loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    self._send_running_reply(chat_id, update.message.message_id), self._main_loop
-                )
-                asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._main_loop)
+            await self._send_running_reply(chat_id, update.message.message_id)
+            await self.bus.publish_inbound(inbound)
         except httpx.RequestError as e:
             logger.warning("[Telegram] ASR request failed: %s", e)
             await update.message.reply_text("ASR недоступен, попробуйте отправить текст.")
