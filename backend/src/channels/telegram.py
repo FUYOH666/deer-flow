@@ -263,7 +263,7 @@ class TelegramChannel(Channel):
         """Handle /start command."""
         if not self._check_user(update.effective_user.id):
             return
-        await update.message.reply_text("Welcome to DeerFlow! Send me a message to start a conversation.\nType /help for available commands.")
+        await update.message.reply_text("Привет! Напиши сообщение, чтобы начать разговор.\n/help — список команд.")
 
     async def _cmd_generic(self, update, context) -> None:
         """Forward slash commands to the channel manager."""

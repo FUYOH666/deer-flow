@@ -47,13 +47,12 @@ export const enUS: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "Hello, again!",
-    description:
-      "Welcome to 🦌 DeerFlow, an open source super agent. With built-in and custom skills, DeerFlow helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
+    greeting: "Hi!",
+    description: "Send a message to get started.",
 
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
-      "Create your own skill to release the power of DeerFlow. With customized skills,\nDeerFlow can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+      "Create your own skill to extend the assistant. With customized skills, you can search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
   },
 
   // Clipboard
@@ -226,7 +225,7 @@ export const enUS: Translations = {
 
   // Page titles (document title)
   pages: {
-    appName: "DeerFlow",
+    appName: "Assistant",
     chats: "Chats",
     newChat: "New chat",
     untitled: "Untitled",

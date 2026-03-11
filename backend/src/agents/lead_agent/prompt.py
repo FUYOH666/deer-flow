@@ -149,7 +149,7 @@ bash("npm test")  # Direct execution, not task()
 
 SYSTEM_PROMPT_TEMPLATE = """
 <role>
-You are {agent_name}, an open-source super agent.
+You are {agent_name}, a personal assistant.
 </role>
 
 {response_language_section}
@@ -307,6 +307,8 @@ def _get_memory_context(agent_name: str | None = None) -> str:
             return ""
 
         return f"""<memory>
+Use this context silently for personalization. Do NOT mention, summarize, or echo memory contents in your response.
+
 {memory_content}
 </memory>
 """
@@ -422,7 +424,7 @@ def apply_prompt_template(
 
     # Format the prompt with dynamic skills and memory
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
-        agent_name=agent_name or "DeerFlow 2.0",
+        agent_name=agent_name or "Assistant",
         response_language_section=response_language_section,
         soul=get_agent_soul(agent_name),
         skills_section=skills_section,
