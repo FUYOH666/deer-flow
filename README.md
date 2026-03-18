@@ -54,7 +54,7 @@ This is open-source. You can run it yourself.
 
 Or I can deploy, customize, and integrate it for your company in **2 weeks**.
 
-**Fixed price: $3,000** — AI Agent package. Custom deployment, your infrastructure. Includes setup and 30 days of support.
+**Free consultation** — tell me your use case, I'll tell you if it fits and how fast we can move.
 
 → **Email:** iamfuyoh@gmail.com  
 → **Telegram:** [@ScanovichAI](https://t.me/ScanovichAI)
